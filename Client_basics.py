@@ -231,9 +231,9 @@ a = E.a
 b = E.b
 
 IKAPub, IKAPri = KeyGen(E)
-h, s = SignGen(stuID, E, sA)
+h_id, s_id = SignGen(stuID, E, sA)
 print("Sending signature and my IKEY to server via IKRegReq() function in json format\n")
-IKRegReq(h, s, IKAPub.x, IKAPub.y, stuID)
+IKRegReq(h_id, s_id, IKAPub.x, IKAPub.y, stuID)
 code = int(input("Enter verification code which is sent to you: "))
 print("+++++++++++++++++++++++++++++++++++++++++++++")
 IKRegVerify(code)
@@ -260,6 +260,4 @@ if SPKverified:
 
     print("Checking the inbox for incoming messages\n")
     print("+++++++++++++++++++++++++++++++++++++++++++++\n\n")
-    PseudoSendMsg(h, s)
-
-
+    PseudoSendMsg(h_sign, s_sign)
