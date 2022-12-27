@@ -21,6 +21,7 @@ API_URL = 'http://10.92.52.255:5000/'
 stuID = 28991
 stuIDB = 2014
 
+
 def egcd(a, b):
     x, y, u, v = 0, 1, 1, 0
     while a != 0:
@@ -30,6 +31,7 @@ def egcd(a, b):
     gcd = b
     return gcd, x, y
 
+
 def modinv(a, m):
     gcd, x, y = egcd(a, m)
     if gcd != 1:
@@ -37,9 +39,11 @@ def modinv(a, m):
     else:
         return x % m
 
+
 def Setup():
     E = Curve.get_curve('secp256k1')
     return E
+
 
 def KeyGen(E):
     n = E.order
@@ -47,6 +51,7 @@ def KeyGen(E):
     sA = randint(1, n-1)
     QA = sA*P
     return sA, QA
+
 
 def SignGen(message, E, sA):
     n = E.order
@@ -58,6 +63,7 @@ def SignGen(message, E, sA):
         (r.bit_length()+7)//8, byteorder='big')+message).digest(), byteorder='big') % n
     s = (sA*h + k) % n
     return h, s
+
 
 def SignVer(message, h, s, E, QA):
     n = E.order
@@ -71,6 +77,7 @@ def SignVer(message, h, s, E, QA):
     else:
         return False
 
+
 def encodeParam(x):
     if (type(x) == str):
         return x.encode()
@@ -79,9 +86,11 @@ def encodeParam(x):
     elif (type(x) == Point):
         return (encodeParam(x.x) + encodeParam(x.y))
 
+
 # server's Identitiy public key
 IKey_Ser = Point(0xce1a69ecc226f9e667856ce37a44e50dbea3d58e3558078baee8fe5e017a556d,
                  0x13ddaf97158206b1d80258d7f6a6880e7aaf13180e060bb1e94174e419a4a093, Curve.get_curve('secp256k1'))
+
 
 def IKRegReq(h, s, x, y):
     mes = {'ID': stuID, 'H': h, 'S': s, 'IKPUB.X': x, 'IKPUB.Y': y}
@@ -90,6 +99,7 @@ def IKRegReq(h, s, x, y):
     if ((response.ok) == False):
         print(response.json())
 
+
 def IKRegVerify(code):
     mes = {'ID': stuID, 'CODE': code}
     print("Sending message is: ", mes)
@@ -97,6 +107,7 @@ def IKRegVerify(code):
     if ((response.ok) == False):
         raise Exception(response.json())
     print(response.json())
+
 
 def SPKReg(h, s, x, y):
     mes = {'ID': stuID, 'H': h, 'S': s, 'SPKPUB.X': x, 'SPKPUB.Y': y}
@@ -107,6 +118,7 @@ def SPKReg(h, s, x, y):
     else:
         res = response.json()
         return res['SPKPUB.X'], res['SPKPUB.Y'], res['H'], res['S']
+
 
 def OTKReg(keyID, x, y, hmac):
     mes = {'ID': stuID, 'KEYID': keyID,
@@ -119,6 +131,7 @@ def OTKReg(keyID, x, y, hmac):
     else:
         return True
 
+
 def ResetIK(rcode):
     mes = {'ID': stuID, 'RCODE': rcode}
     print("Sending message is: ", mes)
@@ -128,6 +141,7 @@ def ResetIK(rcode):
         return False
     else:
         return True
+
 
 def ResetSPK(h, s):
     mes = {'ID': stuID, 'H': h, 'S': s}
@@ -139,6 +153,7 @@ def ResetSPK(h, s):
     else:
         return True
 
+
 def ResetOTK(h, s):
     mes = {'ID': stuID, 'H': h, 'S': s}
     print("Sending message is: ", mes)
@@ -149,6 +164,7 @@ def ResetOTK(h, s):
 
 # Pseudo-client will send you 5 messages to your inbox via server when you call this function
 
+
 def PseudoSendMsg(h, s):
     mes = {'ID': stuID, 'H': h, 'S': s}
     print("Sending message is: ", mes)
@@ -156,6 +172,7 @@ def PseudoSendMsg(h, s):
     print(response.json())
 
 # Get your messages. server will send 1 message from your inbox
+
 
 def ReqMsg(h, s):
     mes = {'ID': stuID, 'H': h, 'S': s}
@@ -168,6 +185,7 @@ def ReqMsg(h, s):
 
 # Get the list of the deleted messages' ids.
 
+
 def ReqDelMsg(h, s):
     mes = {'ID': stuID, 'H': h, 'S': s}
     print("Sending message is: ", mes)
@@ -179,17 +197,20 @@ def ReqDelMsg(h, s):
 
 # If you decrypted the message, send back the plaintext for checking
 
+
 def Checker(stuID, stuIDB, msgID, decmsg):
     mes = {'IDA': stuID, 'IDB': stuIDB, 'MSGID': msgID, 'DECMSG': decmsg}
     print("Sending message is: ", mes)
     response = requests.put('{}/{}'.format(API_URL, "Checker"), json=mes)
     print(response.json())
 
+
 def SessionKey(OTK_A_Pri, EK_B_Pub):
     T = OTK_A_Pri * EK_B_Pub
     U = encodeParam(T) + b'ToBeOrNotToBe'
     hashU = SHA3_256.new(U).digest()
     return hashU
+
 
 def KDFChain(K_KDF):
     ENC = encodeParam(K_KDF) + b'YouTalkingToMe'
