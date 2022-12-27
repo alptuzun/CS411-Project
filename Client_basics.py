@@ -221,3 +221,45 @@ def KDFChain(K_KDF):
         b'MayTheForceBeWithYou'
     K_KDF_Next = SHA3_256.new(KDF_Next).digest()
     return K_ENC, K_HMAC, K_KDF_Next
+
+
+E = Curve.get_curve('secp256k1')
+n = E.order
+p = E.field
+P = E.generator
+a = E.a
+b = E.b
+
+IKAPub, IKAPri = KeyGen(E)
+h, s = SignGen(stuID, E, sA)
+print("Sending signature and my IKEY to server via IKRegReq() function in json format\n")
+IKRegReq(h, s, IKAPub.x, IKAPub.y, stuID)
+code = int(input("Enter verification code which is sent to you: "))
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+IKRegVerify(code)
+SPKPub, SPKPri = KeyGen(E)
+h, s = SignGen(SPKPub, E, sA)
+SPKPUB_x_server, SPKPUB_Y_server, h_server, s_server = SPKReg(
+    h, s, SPKPub.x, SPKPub.y, stuID)
+SPKPUB_server = Point(SPKPUB_x_server, SPKPUB_Y_server,
+                      Curve.get_curve('secp256k1'))
+print("Verifying the server's SPK...")
+print("If server's SPK is verified we can move to the OTK generation step")
+    
+SPKverified = SignVer(SPKPUB_server, h_server, s_server, E, IKey_Ser)
+
+if SPKverified:
+    T = SPKPri * SPKPUB_server
+    U = b'CuriosityIsTheHMACKeyToCreativity' + \
+        encodeParam(T.y) + encodeParam(T.x)
+    kHMAC = SHA3_256.new(U).digest()
+    OTKPub, OTKPri = KeyGen(E)
+    OTKPub_byte = encodeParam(OTKPub)
+    hmac = HMAC.new(kHMAC, OTKPub_byte, digestmod=SHA256).hexdigest()
+    OTKReg(y, OTKPub.x, OTKPub.y, hmac, stuID)
+
+    print("Checking the inbox for incoming messages\n")
+    print("+++++++++++++++++++++++++++++++++++++++++++++\n\n")
+    PseudoSendMsg(h, s)
+
+
