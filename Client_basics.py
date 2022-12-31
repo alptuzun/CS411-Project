@@ -19,7 +19,7 @@ import json
 API_URL = 'http://10.92.52.255:5000/'
 
 stuID = 28991
-stuIDB = 2014
+#stuIDB = 2014
 
 
 def egcd(a, b):
@@ -205,24 +205,6 @@ def Checker(stuID, stuIDB, msgID, decmsg):
     print(response.json())
 
 
-def SessionKey(OTK_A_Pri, EK_B_Pub):
-    T = OTK_A_Pri * EK_B_Pub
-    U = encodeParam(T) + b'ToBeOrNotToBe'
-    hashU = SHA3_256.new(U).digest()
-    return hashU
-
-
-def KDFChain(K_KDF):
-    ENC = encodeParam(K_KDF) + b'YouTalkingToMe'
-    K_ENC = SHA3_256.new(ENC).digest()
-    HMAC = encodeParam(K_KDF) + encodeParam(K_ENC) + b'YouCannotHandleTheTruth'
-    K_HMAC = SHA3_256.new(HMAC).digest()
-    KDF_Next = encodeParam(K_ENC) + encodeParam(K_HMAC) + \
-        b'MayTheForceBeWithYou'
-    K_KDF_Next = SHA3_256.new(KDF_Next).digest()
-    return K_ENC, K_HMAC, K_KDF_Next
-
-
 E = Curve.get_curve('secp256k1')
 n = E.order
 p = E.field
@@ -230,34 +212,215 @@ P = E.generator
 a = E.a
 b = E.b
 
-IKAPub, IKAPri = KeyGen(E)
-h_id, s_id = SignGen(stuID, E, sA)
-print("Sending signature and my IKEY to server via IKRegReq() function in json format\n")
-IKRegReq(h_id, s_id, IKAPub.x, IKAPub.y, stuID)
+def generateKeys(n, P):
+    sA = random.randint(1,n-2)
+    qA = sA * P
+    return qA,sA
+
+def hashMessage(m):
+    h = SHA3_256.new(m)
+    digest = int.from_bytes(h.digest(), byteorder='big')
+    return digest
+
+def encodeParam(x):
+    if(type(x) == str):
+        return x.encode()
+    elif(type(x) == int):
+        return x.to_bytes((x.bit_length() + 7) // 8, byteorder="big")
+    elif(type(x) == Point):
+        return (encodeParam(x.x) + encodeParam(x.y))
+
+def generateSignature(n, P, m, sA): 
+    k = random.randint(1,n-2)
+    R = k * P
+    r = R.x % n
+    h = hashMessage(encodeParam(r) + encodeParam(m)) % n
+    s = (k + sA * h) % n
+    return h,s
+
+def generateSignatureFixedK(n, P, m, sA, k):
+    R = k * P
+    r = R.x % n
+    h = hashMessage(encodeParam(r) + encodeParam(m)) % n
+    s = (k + sA * h) % n
+    return h,s
+
+def verifySignature(s, P, h, qA, n, m):
+    V = (s * P) - (h * qA)
+    v_small = V.x % n
+    h_prime = hashMessage(encodeParam(v_small) + encodeParam(m)) % n
+    
+    if(h == h_prime):
+        return True
+    else:
+        return False
+    
+def generateHMAC(SPKPri, SPKPUB_server):
+    T = SPKPri * SPKPUB_server
+    print("T is", T)
+    U = b'CuriosityIsTheHMACKeyToCreativity' + encodeParam(T.y) + encodeParam(T.x)
+    print("U is", U)
+    kHMAC = SHA3_256.new(U).digest() ##??????
+    print("HMAC key is created", kHMAC)
+    return kHMAC
+
+#Step 2 functions
+def create_session_key(OTKPri,EKPubPoint):
+    T = OTKPri * EKPubPoint
+    U = encodeParam(T.x) + encodeParam(T.y) + b'ToBeOrNotToBe'
+    ks = SHA3_256.new(U).digest()
+    return ks
+
+def create_KDF_chain(ks):
+    kENC = SHA3_256.new( ks+ b'YouTalkingToMe').digest()
+    kHMAC = SHA3_256.new(ks + kENC + b'YouCannotHandleTheTruth').digest()
+    
+    KDFNext = SHA3_256.new(kENC + kHMAC + b'MayTheForceBeWithYou').digest()
+    return kENC,kHMAC,KDFNext
+
+
+IKAPub, IKAPri = generateKeys(n,P)
+
+print("Identitiy Key is created")
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+print("IKey is a long term key and shouldn't be changed and private part should be kept secret. But this is a sample run, so here is my private IKey:", IKAPri)
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+print("My ID number is", stuID, "\n")
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+print("Signature of my ID number is:")
+
+h, s = generateSignature(n, P, stuID, IKAPri)
+print("h=", h)
+print("s=", s, "\n")
+
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+print("Sending signature and my IKEY to server via IKRegReq() function in json format")
+IKRegReq(h,s, IKAPub.x, IKAPub.y)
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+print("Received the verification code through email")
+print("+++++++++++++++++++++++++++++++++++++++++++++")
 code = int(input("Enter verification code which is sent to you: "))
 print("+++++++++++++++++++++++++++++++++++++++++++++")
 IKRegVerify(code)
-SPKPub, SPKPri = KeyGen(E)
-h, s = SignGen(SPKPub, E, sA)
-SPKPUB_x_server, SPKPUB_Y_server, h_server, s_server = SPKReg(
-    h, s, SPKPub.x, SPKPub.y, stuID)
-SPKPUB_server = Point(SPKPUB_x_server, SPKPUB_Y_server,
-                      Curve.get_curve('secp256k1'))
-print("Verifying the server's SPK...")
-print("If server's SPK is verified we can move to the OTK generation step")
+
+
+print("\n")
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+print("Generating SPK...")
+SPKPub, SPKPri = generateKeys(n,P)
+print("Private SPK:", SPKPri)
+print("Public SPK.x:", SPKPub.x)
+print("Public SPK.y:", SPKPub.y)
+print("Convert SPK.x and SPK.y to bytes in order to sign them then concatenate them result will be like: ", encodeParam(SPKPub))
+print("\n")
+print("+++++++++++++++++++++++++++++++++++++++++++++")
+
+h, s = generateSignature(n, P, SPKPub, IKAPri)
+print("Signature of SPK is:" )
+print("h:", h)
+print("s:", s)
+print("Sending SPK and the signatures to the server via SPKReg() function in json format...")
+SPKPUB_x_server, SPKPUB_Y_server, h_server, s_server = SPKReg(h,s, SPKPub.x, SPKPub.y)
+SPKPUB_server = Point(SPKPUB_x_server, SPKPUB_Y_server, Curve.get_curve('secp256k1'))
+SPKverified = verifySignature(s_server, P, h_server, IKey_Ser, n, SPKPUB_server)
+print("Is SPK verified?:", SPKverified)
+
+if(SPKverified):
+    kHMAC = generateHMAC(SPKPri, SPKPUB_server)
+    OTKlist = []
+    for y in range(0,10):
+        OTKPub, OTKPri = generateKeys(n,P)
+        OTKPub_byte = encodeParam(OTKPub)
+        hmac = HMAC.new(kHMAC, OTKPub_byte, digestmod = SHA256).hexdigest()
+        OTKReg(y,OTKPub.x,OTKPub.y,hmac)
+        OTKlist.append(OTKPri)
+        
+    #PROJECT STEP 2 CODES
+
+    print("Checking the inbox for incoming messages")
+    print("+++++++++++++++++++++++++++++++++++++++++++++\n")
+    print("Signing my stuID with my private IK")
+    print("In signature generation I fixed the random variable to 1748178 so that you can re-generate if you want\n")
+
+    fixed_k = 1748178 
+    h, s = generateSignatureFixedK(n, P, stuID, IKAPri, fixed_k)    
+    PseudoSendMsg(h,s)
+    print("+++++++++++++++++++++++++++++++++++++++++++++")
+    curr_OTKid = 0
+    counter = 0
+    messages = {}
+    for i in range(5):
     
-SPKverified = SignVer(SPKPUB_server, h_server, s_server, E, IKey_Ser)
+        stuIDB, OTKID, MSGID, MSG, EKX, EKY = ReqMsg(h, s)
+        print("I got this from client {p}:".format(p=stuIDB))
+        print(MSG)
 
-if SPKverified:
-    T = SPKPri * SPKPUB_server
-    U = b'CuriosityIsTheHMACKeyToCreativity' + \
-        encodeParam(T.y) + encodeParam(T.x)
-    kHMAC = SHA3_256.new(U).digest()
-    OTKPub, OTKPri = KeyGen(E)
-    OTKPub_byte = encodeParam(OTKPub)
-    hmac = HMAC.new(kHMAC, OTKPub_byte, digestmod=SHA256).hexdigest()
-    OTKReg(y, OTKPub.x, OTKPub.y, hmac, stuID)
+        print("Converting message to bytes to decrypt it...")
+        MSG_bytes = MSG.to_bytes((MSG.bit_length() + 7) // 8, byteorder="big")
+        print("Converted message is:")
+        print(MSG_bytes)
+        
+        if(counter == 0):
+            curr_OTKid = OTKID
+            EKPubPoint = Point(EKX, EKY,
+                                Curve.get_curve('secp256k1'))
+            
+            ks = create_session_key(OTKlist[curr_OTKid], EKPubPoint)
+            print("Generating the key Ks, Kenc, & Khmac and then the HMAC value ..")
+            kENC,kHMAC,KDFNext = create_KDF_chain(ks)
+            
+            counter += 1
+        else:
+            kENC,kHMAC,KDFNext = create_KDF_chain(KDFNext)
+            
+        nonce = MSG_bytes[:8]
+        MAC = MSG_bytes[-32:]
+        ciphertext = MSG_bytes[8:-32]
 
-    print("Checking the inbox for incoming messages\n")
-    print("+++++++++++++++++++++++++++++++++++++++++++++\n\n")
-    PseudoSendMsg(h_sign, s_sign)
+        AESCTR = AES.new(kENC, AES.MODE_CTR, nonce=nonce)
+        
+        hmac = HMAC.new(kHMAC, msg=ciphertext, digestmod=SHA256).digest()
+        print("hmac is:", hmac)
+        print("\n")
+        
+        if(hmac == MAC):
+            print("Hmac value is verified")
+            plaintext = AESCTR.decrypt(ciphertext).decode("UTF-8")
+            print("The collected plaintext:", plaintext)
+            Checker(stuID, stuIDB, MSGID, plaintext)
+            print("\n")
+            print("+++++++++++++++++++++++++++++++++++++++++++++")
+            messages[MSGID] = plaintext
+        else:
+            print("Hmac value couldn't be verified")
+            Checker(stuID, stuIDB, MSGID, "INVALIDHMAC")
+            print("\n")
+            print("+++++++++++++++++++++++++++++++++++++++++++++")
+            messages[MSGID] = "INVALIDHMAC"
+
+    deleted_messages = ReqDelMsg(h,s)
+    print("Checking whether there were some deleted messages!! ")
+    print("==========================================")
+    for i,v in messages.items():
+        if(v != "INVALIDHMAC"):
+            try:
+                if(i in deleted_messages):
+                    print("Message", i, "-", "Was deleted by sender - X")
+                else:
+                    print("Message", i, "-", v, "- Read")
+            except:
+                print("Message", i, "-", v, "- Read")
+    print("+++++++++++++++++++++++++++++++++++++++++++++")
+    print("Trying to delete OTKs...")  # Deleting keys
+    h, s = generateSignature(n, P, stuID, IKAPri)
+    ResetOTK(h, s)
+    print("+++++++++++++++++++++++++++++++++++++++++++++")
+    print("\n")
+    print("Trying to delete SPKs...")
+    h, s = generateSignature(n, P, stuID, IKAPri)
+    ResetSPK(h, s)
+    print("+++++++++++++++++++++++++++++++++++++++++++++")
+    print("Trying to delete Identity Key...")
+    rcode = int(
+        input("Please enter your rcode (reset code) that was sent via email: "))
+    ResetIK(rcode)
